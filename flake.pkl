@@ -1,4 +1,4 @@
-#!/usr/bin/env -S pkl-nix-tools
+#!/usr/bin/env -S pkl eval
 amends "@nix/Flake.pkl"
 
 import "@nix/Nix.pkl" as Nix
@@ -18,7 +18,7 @@ devShells {
         code =
           """
           inputs.nixpkgs.legacyPackages.\(system).mkShell {
-            packages = with inputs.nixpkgs.legacyPackages.\(system); [ bash pkl nix curl unzip ];
+            packages = with inputs.nixpkgs.legacyPackages.\(system); [ bash pkl nix python3 unzip ];
           }
           """
       }

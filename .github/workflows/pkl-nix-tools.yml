@@ -24,13 +24,14 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/pkl-nix-tools@* ]]; then
-            version=$(pkl eval --no-project -x 'package.version' PklProject)
-            test "$TAG" = "pkl-nix-tools@$version"
+            sh scripts/release-tag.sh "$TAG"
           fi
           pkl project resolve
           git diff --exit-code -- PklProject.deps.json
       - name: Test wrapper and packaged Pkl import
         run: sh scripts/test-package.sh
+      - name: Build and run the complete example with Nix
+        run: bash scripts/test-e2e.sh
       - name: Check self-hosted flake against published pkl-nix
         run: |
           pkl eval flake.pkl > /tmp/pkl-nix-tools-flake.nix
@@ -63,8 +64,7 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          version=$(pkl eval --no-project -x 'package.version' PklProject)
-          test "$TAG" = "pkl-nix-tools@$version"
+          sh scripts/release-tag.sh "$TAG"
       - name: Publish Pkl package assets
         env:
           GH_TOKEN: ${{ github.token }}

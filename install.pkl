@@ -1,0 +1,17 @@
+#!/usr/bin/env -S pkl run
+/// Extract the Bash launcher and its Pkl helper from this package.
+extends "pkl:Command"
+
+options: Options
+
+class Options {
+  /// Installation directory. Add it to PATH after making the launcher executable.
+  directory: String(!isEmpty) = read("env:HOME") + "/.local/share/pkl-nix-tools"
+}
+
+output {
+  files {
+    [options.directory + "/pkl-nix-tools"] { bytes = read("pkl-nix-tools").bytes }
+    [options.directory + "/imports.pkl"] { bytes = read("imports.pkl").bytes }
+  }
+}

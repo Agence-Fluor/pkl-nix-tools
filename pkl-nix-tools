@@ -3,6 +3,14 @@ set -euo pipefail
 
 fail() { printf 'pkl-nix-tools: %s\n' "$*" >&2; exit 1; }
 
+usage() {
+  printf '%s\n' 'usage: pkl-nix-tools [path/to/flake.pkl] generate|build|develop|run|flake ...' \
+    'flake.pkl is a Pkl module: ./flake.pkl renders Nix; this command runs Nix.'
+}
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then usage; exit 0; fi
+[[ $# -gt 0 ]] || { usage >&2; exit 2; }
+(( BASH_VERSINFO[0] >= 4 )) || fail 'Bash 4 or newer is required'
+
 script_path=${BASH_SOURCE[0]}
 while [[ -L $script_path ]]; do
   link_dir=$(cd -P -- "$(dirname -- "$script_path")" && pwd)
@@ -34,7 +42,7 @@ if [[ ${1:-} == flake.pkl || ${1:-} == */flake.pkl ]]; then
   root=$(cd -P -- "$(dirname -- "$1")" && pwd)
   shift
 else
-  root=$PWD
+  root=$(pwd -P)
   while [[ ! -f $root/flake.pkl ]]; do
     [[ $root != / ]] || fail 'aucun flake.pkl trouvé dans les répertoires parents'
     root=${root%/*}
@@ -57,7 +65,7 @@ project_deps_path=
 if [[ -n $pkl_project_path && -f $project_dir/PklProject.deps.json ]]; then
   project_deps_path=$project_dir/PklProject.deps.json
 fi
-cache_key="pkl-nix-tools-fingerprint-v1|$pkl_project_path|$project_deps_path"
+cache_key="pkl-nix-tools-fingerprint-v2|$pkl_project_path|$project_deps_path"
 uri_path "$root/flake.pkl"
 entry_uri="file://$encoded"
 uri_path "$root"
@@ -70,6 +78,8 @@ mkdir -p -- "$root/.pkl-nix-tools"
 [[ -f $root/.pkl-nix-tools/.gitignore ]] || printf '*\n' > "$root/.pkl-nix-tools/.gitignore"
 flake=$root/.pkl-nix-tools/flake.nix
 fingerprint=$root/.pkl-nix-tools/fingerprint
+# Old generated locks are disposable; Nix reads and writes the project lock.
+rm -f -- "$root/.pkl-nix-tools/flake.lock"
 
 hash_file() { nix --extra-experimental-features 'nix-command flakes' hash file --type sha256 --base16 -- "$1"; }
 run_pkl() { JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-XX:-UsePerfData" pkl "$@"; }
@@ -84,7 +94,11 @@ cache_valid() {
   while IFS= read -r -d '' path <&3; do
     IFS= read -r -d '' saved <&3 || { exec 3<&-; return 1; }
     [[ -f $path && ! -L $path ]] || { exec 3<&-; return 1; }
-    [[ $path != *.pkl || $(< "$path") != *'import*('* ]] || { exec 3<&-; return 1; }
+    case $path in
+      *.pkl|*/PklProject)
+        # A newly added glob match cannot be detected by hashing existing files.
+        [[ ! $(< "$path") =~ import[[:space:]]*\* ]] || { exec 3<&-; return 1; } ;;
+    esac
     current=$(hash_file "$path") || { exec 3<&-; return 1; }
     [[ $current == "$saved" ]] || { exec 3<&-; return 1; }
     ((count+=1))
@@ -93,7 +107,7 @@ cache_valid() {
   (( count >= 3 ))
 }
 
-tmp_flake= tmp_fingerprint=
+tmp_flake='' tmp_fingerprint=''
 cleanup() {
   [[ -z $tmp_flake ]] || rm -f -- "$tmp_flake"
   [[ -z $tmp_fingerprint ]] || rm -f -- "$tmp_fingerprint"
@@ -104,13 +118,16 @@ generate() {
   local uri path file digest imports
   local -a files=("$root/flake.pkl" "$script_dir/imports.pkl" "$script_dir/pkl-nix-tools")
   local -a pkl_project_args=()
+  local -a graph_args=(--property "entry=$entry_uri")
   local -A seen=()
   if [[ -n $pkl_project_path ]]; then
     files+=("$pkl_project_path")
     [[ -z $project_deps_path ]] || files+=("$project_deps_path")
     pkl_project_args=(--project-dir "$project_dir")
+    uri_path "$pkl_project_path"
+    graph_args+=(--property "project=file://$encoded")
   fi
-  imports=$(run_pkl eval "${pkl_project_args[@]}" --property "entry=$entry_uri" "$script_dir/imports.pkl")
+  imports=$(run_pkl eval "${pkl_project_args[@]}" "${graph_args[@]}" "$script_dir/imports.pkl")
   while IFS= read -r uri; do
     [[ $uri == file:///* ]] || continue
     path=${uri#file://}
@@ -140,9 +157,9 @@ generate() {
   tmp_fingerprint=
 }
 
-[[ $# -gt 0 ]] || fail 'usage: ./flake.pkl generate|build|develop|run|flake ...'
+[[ $# -gt 0 ]] || { usage >&2; exit 2; }
 if [[ $1 == generate ]]; then
-  [[ $# == 1 ]] || fail 'usage: ./flake.pkl generate'
+  [[ $# == 1 ]] || fail 'usage: pkl-nix-tools generate'
   generate
   exit 0
 fi
@@ -151,41 +168,44 @@ case $1 in
   build|develop|run) command=$1; shift ;;
   flake)
     command=flake; shift
-    [[ $# -gt 0 ]] || fail 'usage: ./flake.pkl flake check|lock|update|show ...'
+    [[ $# -gt 0 ]] || fail 'usage: pkl-nix-tools flake check|lock|update|show ...'
     subcommand=$1; shift
+    case $subcommand in
+      check|lock|update|show|metadata|archive|prefetch) ;;
+      *) fail "unsupported flake command: $subcommand (use nix directly for flake creation)" ;;
+    esac
     ;;
   *) fail "commande non prise en charge: $1" ;;
 esac
 
-cache_valid || generate
-
 ref=$flake_ref
-lock_args=(--reference-lock-file "$root/flake.lock" --output-lock-file "$root/flake.lock")
+lock_args=()
 if [[ $command == flake && $subcommand == update ]]; then
   declare -a args=()
   explicit_flake=0
   after_flake=0
+  current_flake=1
   for arg in "$@"; do
     if (( after_flake )); then
       case $arg in
-        .) args+=("$ref") ;;
-        .#*) args+=("$ref${arg:1}") ;;
-        *) args+=("$arg") ;;
+        .) args+=("$ref"); current_flake=1 ;;
+        *) args+=("$arg"); current_flake=0 ;;
       esac
       after_flake=0
       continue
     fi
     case $arg in
       --flake) args+=("$arg"); explicit_flake=1; after_flake=1 ;;
-      --flake=.) args+=("--flake=$ref"); explicit_flake=1 ;;
-      --flake=.#*) args+=("--flake=$ref${arg#--flake=.}"); explicit_flake=1 ;;
-      --flake=*) args+=("$arg"); explicit_flake=1 ;;
-      .) args+=(--flake "$ref"); explicit_flake=1 ;;
-      .#*) args+=(--flake "$ref${arg:1}"); explicit_flake=1 ;;
+      --flake=.) args+=("--flake=$ref"); explicit_flake=1; current_flake=1 ;;
+      --flake=*) args+=("$arg"); explicit_flake=1; current_flake=0 ;;
       *) args+=("$arg") ;;
     esac
   done
   if (( !explicit_flake )); then args=(--flake "$ref" "${args[@]}"); fi
+  if (( current_flake )); then
+    cache_valid || generate
+    lock_args=(--reference-lock-file "$root/flake.lock" --output-lock-file "$root/flake.lock")
+  fi
   exec nix --extra-experimental-features 'nix-command flakes' flake update "${lock_args[@]}" "${args[@]}"
 fi
 
@@ -194,6 +214,7 @@ found_current=0
 foreign_ref=0
 expect_value=0
 after_separator=0
+expression=0
 for arg in "$@"; do
   if (( expect_value )); then
     args+=("$arg")
@@ -207,10 +228,11 @@ for arg in "$@"; do
     --) args+=("$arg"); after_separator=1 ;;
     *)
       args+=("$arg")
+      case $arg in --expr|--expr=*|--file|--file=*|-f) expression=1 ;; esac
       case $arg in
         --command|-c) after_separator=1 ;;
-        --out-link|-o|--expr|--file|-f|--system|--store|--log-format|--inputs-from|--reference-lock-file|--output-lock-file|--max-jobs|--cores|--builders|--substituters|--trusted-public-keys|--extra-substituters|--extra-trusted-public-keys) expect_value=1 ;;
-        --arg|--argstr|--override-input|--option) expect_value=2 ;;
+        --out-link|-o|--expr|--file|-f|--system|--store|--eval-store|--log-format|--inputs-from|--reference-lock-file|--output-lock-file|--max-jobs|-j|--cores|--builders|--substituters|--trusted-public-keys|--extra-substituters|--extra-trusted-public-keys|--update-input|--profile|--priority|--extra-experimental-features|--experimental-features|--keep|-k|--unset|-u) expect_value=1 ;;
+        --arg|--argstr|--override-input|--override-flake|--redirect|--option) expect_value=2 ;;
         --*=*|-) ;;
         -*) ;;
         *) foreign_ref=1 ;;
@@ -218,7 +240,14 @@ for arg in "$@"; do
       ;;
   esac
 done
-if (( !found_current && !foreign_ref )); then args=("$ref" "${args[@]}"); fi
+if (( !found_current && !foreign_ref && !expression )); then
+  args=("$ref" "${args[@]}"); found_current=1
+fi
+if (( found_current )); then
+  (( !foreign_ref )) || fail 'build current and external flakes in separate invocations so their lock files stay independent'
+  cache_valid || generate
+  lock_args=(--reference-lock-file "$root/flake.lock" --output-lock-file "$root/flake.lock")
+fi
 
 if [[ $command == flake ]]; then
   exec nix --extra-experimental-features 'nix-command flakes' flake "$subcommand" "${lock_args[@]}" "${args[@]}"

@@ -1,18 +1,22 @@
 # Exemple complet
 
-`PklProject` importe `pkl-nix` comme dépendance Pkl locale sous l'alias
-`nix`. `flake.pkl` est exécutable et décrit un package, une application,
-un devShell et un check. Nix conserve son `flake.lock` standard ici.
+Le projet référence `pkl-nix` publié et le paquet `pkl-nix-tools` de ce
+checkout. Il décrit un package, une application, un devShell et un check.
+Depuis ce dossier :
 
 ```sh
-export PATH="$(cd .. && pwd):$PATH"  # depuis ce répertoire, sans installation
-pkl project resolve               # après un changement de dépendance Pkl
-./flake.pkl flake lock
-./flake.pkl build
-./flake.pkl run .#hello
-./flake.pkl develop --command hello-pkl
-./flake.pkl flake check
+pkl project resolve
+pkl run install.pkl --directory "$PWD/.tools"
+chmod +x .tools/pkl-nix-tools
+export PATH="$PWD/.tools:$PATH"
+./flake.pkl                              # rendu Pkl → Nix
+pkl-nix-tools flake lock
+pkl-nix-tools build
+pkl-nix-tools run .#hello
+pkl-nix-tools develop --command hello-pkl
+pkl-nix-tools flake check
 ```
 
-L'application lit `message.txt` avec `../message.txt` depuis le Nix généré.
-Vous pouvez supprimer `.pkl-nix-tools/` ; la commande suivante le recrée.
+L'application lit `message.txt` via `../message.txt` depuis le Nix généré.
+Nix lit et écrit uniquement le `flake.lock` à la racine de cet exemple.
+Vous pouvez supprimer `.pkl-nix-tools/` ; le wrapper le reconstruit.

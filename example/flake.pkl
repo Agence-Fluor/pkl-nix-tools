@@ -1,4 +1,4 @@
-#!/usr/bin/env -S pkl-nix-tools
+#!/usr/bin/env -S pkl eval
 amends "@nix/Flake.pkl"
 
 import "@nix/Nix.pkl" as Nix
@@ -14,7 +14,7 @@ inputs {
 packages {
   ["x86_64-linux"] {
     ["hello"] = new Nix.Raw {
-      code = "inputs.nixpkgs.legacyPackages.x86_64-linux.writeShellScriptBin \"hello-pkl\" \"cat ${../message.txt}\""
+      code = "inputs.nixpkgs.legacyPackages.x86_64-linux.writeShellScriptBin \"hello-pkl\" \"exec ${inputs.nixpkgs.legacyPackages.x86_64-linux.coreutils}/bin/cat ${../message.txt}\""
     }
     ["default"] = new Nix.Ref { path = "self.packages.x86_64-linux.hello" }
   }
