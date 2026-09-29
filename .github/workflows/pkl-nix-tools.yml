@@ -45,6 +45,7 @@ jobs:
       - uses: pkl-community/setup-pkl@v0
         with:
           pkl-version: 0.31.1
+      - uses: cachix/install-nix-action@v31
       - uses: actions/download-artifact@v8
         with:
           name: pkl-nix-tools-package
