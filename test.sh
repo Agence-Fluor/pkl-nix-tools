@@ -26,9 +26,10 @@ export PATH="$repo/pkl-nix-tools:$work/bin:$PATH"
 
 cat > "$project/flake.pkl" <<EOF
 #!/usr/bin/env -S pkl-nix-tools
-amends "$repo/pkl-nix/Flake.pkl"
 import "value.pkl" as Value
-description = Value.description
+output {
+  text = "{ description = \"" + Value.description + "\"; outputs = { self, ... }: { }; }"
+}
 EOF
 chmod +x "$project/flake.pkl"
 printf 'description = "first"\n' > "$project/value.pkl"
@@ -73,30 +74,15 @@ rm -rf .pkl-nix-tools
 ./flake.pkl generate
 [[ -f .pkl-nix-tools/flake.nix && -f .pkl-nix-tools/fingerprint ]]
 
-(
-  cd "$repo/pkl-nix-tools/example"
-  ./flake.pkl generate
-  nix-instantiate --parse .pkl-nix-tools/flake.nix >/dev/null
-  grep -Fq '../message.txt' .pkl-nix-tools/flake.nix
-  [[ -f flake.lock && ! -e flake.nix && ! -e .pkl-nix-tools/flake.lock ]]
-  rm -rf .pkl-nix-tools
-)
-
-mkdir -p "$work/install"
-printf 'ID=debian\n' > "$work/install/os-release"
-for attempt in 1 2; do
-  PKL_NIX_TOOLS_OS_RELEASE_FILE="$work/install/os-release" \
-  PKL_NIX_TOOLS_NIXOS_MARKER="$work/install/no-marker" \
-  PKL_NIX_TOOLS_BASE_URL="file://$repo/pkl-nix-tools" \
-  PKL_NIX_TOOLS_INSTALL_DIR="$work/install/share/pkl-nix-tools" \
-  PKL_NIX_TOOLS_BIN_DIR="$work/install/bin" \
-  HOME="$work/install" sh "$repo/pkl-nix-tools/install.sh" >/dev/null
-done
-[[ -L $work/install/bin/pkl-nix-tools ]]
-PATH="$work/install/bin:$PATH" ./flake.pkl generate
-[[ -f .pkl-nix-tools/flake.nix ]]
-touch "$work/install/nixos-marker"
-output=$(PKL_NIX_TOOLS_NIXOS_MARKER="$work/install/nixos-marker" sh "$repo/pkl-nix-tools/install.sh")
-[[ $output == *'github.com/Agence-Fluor/pkl-nix-tools#nixos'* ]]
+if [[ -f $repo/pkl-nix/PklProject ]]; then
+  (
+    cd "$repo/pkl-nix-tools/example"
+    ./flake.pkl generate
+    nix-instantiate --parse .pkl-nix-tools/flake.nix >/dev/null
+    grep -Fq '../message.txt' .pkl-nix-tools/flake.nix
+    [[ -f flake.lock && ! -e flake.nix && ! -e .pkl-nix-tools/flake.lock ]]
+    rm -rf .pkl-nix-tools
+  )
+fi
 
 printf 'pkl-nix-tools tests passed\n'

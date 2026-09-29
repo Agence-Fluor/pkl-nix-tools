@@ -1,65 +1,75 @@
 # pkl-nix-tools
 
-**Un `flake.pkl` exécutable. Nix fait le reste.** Le shebang appelle un petit
-wrapper Bash qui génère `.pkl-nix-tools/flake.nix` avec la dépendance
-[`pkl-nix`](https://github.com/Agence-Fluor/pkl-nix) du `PklProject`, puis transmet la
-commande à Nix. `flake.lock` reste à la racine du projet.
+`flake.pkl` décrit le flake avec [`pkl-nix`](https://github.com/Agence-Fluor/pkl-nix).
+Le shebang appelle le petit wrapper Bash `pkl-nix-tools`, qui écrit
+`.pkl-nix-tools/flake.nix` puis passe la commande à Nix. `flake.lock` reste
+à la racine ; le dossier généré peut être supprimé.
 
-## Installation
+## Paquet et développement
 
-Nix et `curl` sont requis. L'installateur réutilise Pkl s'il est présent ;
-sinon, il installe Pkl 0.31.1 pour Linux ou macOS.
+`PklProject` versionne le paquet Pkl. Le ZIP publié avec le tag
+`pkl-nix-tools@0.1.0` contient **`pkl-nix-tools` et `imports.pkl`** : gardez
+ces deux fichiers côte à côte, rendez le script exécutable après extraction
+(`chmod +x pkl-nix-tools`) et mettez leur dossier dans votre `PATH`.
+Depuis ce checkout :
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Agence-Fluor/pkl-nix-tools/main/install.sh | sh
+export PATH="$PWD:$PATH"
+sh scripts/test-package.sh
+sh scripts/package-pkl.sh
 ```
 
-Ajoutez `~/.local/bin` à votre `PATH` si besoin. [Exemple complet](example/README.md).
+Publiez d'abord `pkl-nix@0.1.0`, puis `pkl-nix-tools@0.1.0` : le test du
+flake de ce dépôt utilise la version publiée de `pkl-nix`.
+Pour utiliser le ZIP de release téléchargé :
 
-## Dans votre projet
+```sh
+unzip pkl-nix-tools@0.1.0.zip -d "$HOME/.local/share/pkl-nix-tools"
+chmod +x "$HOME/.local/share/pkl-nix-tools/pkl-nix-tools"
+export PATH="$HOME/.local/share/pkl-nix-tools:$PATH"
+```
 
-`PklProject` référence `pkl-nix` sous l'alias `nix` :
+Une dépendance Pkl fournit les modules du paquet ; elle n'installe pas
+l'exécutable Bash dans le `PATH`. Le [projet exemple](example/README.md)
+référence `pkl-nix` dans son `PklProject`.
+
+## Projet consommateur
+
+Déclarez les versions publiées dans `PklProject` :
 
 ```pkl
 amends "pkl:Project"
 dependencies {
-  ["nix"] {
-    uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.0"
-  }
+  ["nix"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.0" }
+  ["tools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0.1.0" }
 }
 ```
 
-Après `pkl project resolve`, commencez `flake.pkl` par :
+Après `pkl project resolve`, rendez `flake.pkl` exécutable :
 
 ```pkl
 #!/usr/bin/env -S pkl-nix-tools
 amends "@nix/Flake.pkl"
 ```
 
-Puis `chmod +x flake.pkl` et lancez :
-
 ```sh
+chmod +x flake.pkl
 ./flake.pkl generate
-./flake.pkl build .#hello
 ./flake.pkl develop
+./flake.pkl build .#hello
 ./flake.pkl run .#hello
 ./flake.pkl flake check
-./flake.pkl flake update
 ```
 
-Le cache `.pkl-nix-tools/` peut être supprimé à tout moment. Aucun `flake.nix`
-n'est créé à la racine ; Nix reçoit `path:/projet?dir=.pkl-nix-tools`.
+Le wrapper transmet à Nix la référence explicite
+`path:/chemin/du/projet?dir=.pkl-nix-tools`. Il ne crée jamais de
+`flake.nix` à la racine.
 
 ## NixOS
 
-Sur NixOS, l'installateur affiche cette section. Installez les outils via
-`configuration.nix`. Placez le dépôt sous `/etc/nixos/pkl-nix-tools` :
-
-```sh
-sudo git clone https://github.com/Agence-Fluor/pkl-nix-tools /etc/nixos/pkl-nix-tools
-```
-
-Dans la liste `environment.systemPackages` existante, ajoutez :
+Placez le checkout de `pkl-nix-tools` sous `/etc/nixos/pkl-nix-tools` et
+ajoutez ces entrées à la liste `environment.systemPackages` existante de
+`configuration.nix` :
 
 ```nix
 environment.systemPackages = with pkgs; [
@@ -72,6 +82,4 @@ environment.systemPackages = with pkgs; [
 ];
 ```
 
-```sh
-sudo nixos-rebuild switch
-```
+Puis lancez `sudo nixos-rebuild switch`.

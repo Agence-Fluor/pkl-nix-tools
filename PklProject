@@ -1,0 +1,10 @@
+amends "pkl:Project"
+
+package {
+  name = "pkl-nix-tools"
+  baseUri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools"
+  version = "0.1.0"
+  packageZipUrl =
+    "https://github.com/Agence-Fluor/pkl-nix-tools/releases/download/pkl-nix-tools@\(version)/pkl-nix-tools@\(version).zip"
+  sourceCode = "https://github.com/Agence-Fluor/pkl-nix-tools"
+}
