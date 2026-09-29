@@ -1,0 +1,10 @@
+module pklNixTools.Imports
+
+import "pkl:analyze" as analyze
+
+local entry = read("prop:entry")
+local graph = analyze.importGraph(Set(entry))
+
+output {
+  text = graph.resolvedImports.values.filter((uri) -> uri.startsWith("file:")).toList().sort().join("\n") + "\n"
+}

@@ -1,0 +1,44 @@
+#!/usr/bin/env -S pkl-nix-tools
+amends "@nix/Flake.pkl"
+
+import "@nix/Nix.pkl" as Nix
+
+description = "pkl-nix-tools end-to-end example"
+
+inputs {
+  ["nixpkgs"] = new Nix.Input {
+    url = "github:NixOS/nixpkgs/nixos-unstable"
+  }
+}
+
+packages {
+  ["x86_64-linux"] {
+    ["hello"] = new Nix.Raw {
+      code = "inputs.nixpkgs.legacyPackages.x86_64-linux.writeShellScriptBin \"hello-pkl\" \"cat ${../message.txt}\""
+    }
+    ["default"] = new Nix.Ref { path = "self.packages.x86_64-linux.hello" }
+  }
+}
+
+devShells {
+  ["x86_64-linux"] {
+    ["default"] = new Nix.Raw {
+      code = "inputs.nixpkgs.legacyPackages.x86_64-linux.mkShell { packages = [ self.packages.x86_64-linux.hello ]; }"
+    }
+  }
+}
+
+apps {
+  ["x86_64-linux"] {
+    ["hello"] = new Nix.App {
+      program = new Nix.Raw { code = "\"${self.packages.x86_64-linux.hello}/bin/hello-pkl\"" }
+    }
+    ["default"] = new Nix.Ref { path = "self.apps.x86_64-linux.hello" }
+  }
+}
+
+checks {
+  ["x86_64-linux"] {
+    ["hello"] = new Nix.Ref { path = "self.packages.x86_64-linux.hello" }
+  }
+}
