@@ -8,5 +8,5 @@ stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT HUP INT TERM
 
 mkdir -p "$output_path"
-cp PklProject imports.pkl pkl-nix-tools "$stage/"
+cp PklProject PklProject.deps.json imports.pkl pkl-nix-tools "$stage/"
 pkl project package --skip-publish-check --output-path "$output_path" "$stage"

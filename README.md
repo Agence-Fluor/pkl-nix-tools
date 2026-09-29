@@ -8,7 +8,7 @@ Le shebang appelle le petit wrapper Bash `pkl-nix-tools`, qui écrit
 ## Paquet et développement
 
 `PklProject` versionne le paquet Pkl. Le ZIP publié avec le tag
-`pkl-nix-tools@0.1.0` contient **`pkl-nix-tools` et `imports.pkl`** : gardez
+`pkl-nix-tools@0.1.2` contient **`pkl-nix-tools` et `imports.pkl`** : gardez
 ces deux fichiers côte à côte, rendez le script exécutable après extraction
 (`chmod +x pkl-nix-tools`) et mettez leur dossier dans votre `PATH`.
 Depuis ce checkout :
@@ -19,12 +19,12 @@ sh scripts/test-package.sh
 sh scripts/package-pkl.sh
 ```
 
-Publiez d'abord `pkl-nix@0.1.0`, puis `pkl-nix-tools@0.1.0` : le test du
-flake de ce dépôt utilise la version publiée de `pkl-nix`.
+Publiez d'abord `pkl-nix@0.1.0`, puis `pkl-nix-tools@0.1.2` : le
+`PklProject` de ce dépôt référence la version publiée de `pkl-nix`.
 Pour utiliser le ZIP de release téléchargé :
 
 ```sh
-unzip pkl-nix-tools@0.1.0.zip -d "$HOME/.local/share/pkl-nix-tools"
+unzip pkl-nix-tools@0.1.2.zip -d "$HOME/.local/share/pkl-nix-tools"
 chmod +x "$HOME/.local/share/pkl-nix-tools/pkl-nix-tools"
 export PATH="$HOME/.local/share/pkl-nix-tools:$PATH"
 ```
@@ -41,7 +41,7 @@ Déclarez les versions publiées dans `PklProject` :
 amends "pkl:Project"
 dependencies {
   ["nix"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.0" }
-  ["tools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0.1.0" }
+  ["tools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0.1.2" }
 }
 ```
 
