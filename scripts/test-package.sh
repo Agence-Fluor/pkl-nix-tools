@@ -45,7 +45,7 @@ cat > "$temp/consumer/PklProject.template" <<'PKL'
 amends "pkl:Project"
 dependencies {
   ["tools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@@VERSION@" }
-  ["nix"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.0" }
+  ["nix"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.1" }
 }
 evaluatorSettings {
   moduleCacheDir = ".pkl-cache"

@@ -11,12 +11,12 @@ Dans le `PklProject` du projet :
 ```pkl
 amends "pkl:Project"
 dependencies {
-  ["nix"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.0" }
+  ["nix"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.1" }
   ["tools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0.1.2" }
 }
 ```
 
-Après publication de cette version :
+Résolvez les dépendances et installez le wrapper :
 
 ```sh
 pkl project resolve
@@ -116,5 +116,3 @@ git push github "$tag"
 ```
 
 La CI vérifie le tag avant les tests et publie les quatre assets Pkl.
-Le tag historique `pkl-nix-tools@0.1.1` avait une version incohérente ; la
-prochaine release préparée est `0.1.2`.
