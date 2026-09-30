@@ -157,6 +157,12 @@ rm -rf .pkl-nix-tools
 (cd "$work" && "$project/flake.pkl" generate)
 [[ -f .pkl-nix-tools/flake.nix && -f .pkl-nix-tools/fingerprint ]]
 
+# A flake below its PklProject must also bootstrap through a relative path.
+mkdir child
+cp flake.pkl value.pkl launcher-source.pkl child/
+./child/flake.pkl generate
+[[ -f child/.pkl-nix-tools/run && -f child/.pkl-nix-tools/flake.nix ]]
+
 (
     mkdir -p "$work/checkout"
     cp "$repo/PklProject" "$repo/PklProject.deps.json" "$repo/Bootstrap.pkl" "$repo/install.pkl" "$repo/pkl-nix-tools" "$work/checkout/"

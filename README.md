@@ -21,7 +21,7 @@ dependencies {
 Dans `flake.pkl`, reprenez le bootstrap de [l'exemple](example/flake.pkl) :
 
 ```pkl
-#!/usr/bin/env -S bash -ec 'd=${0%/*};r=$d/.pkl-nix-tools;test ! -L "$r";test -f "$r/run"||{ mkdir -p "$r";echo "*" >"$r/.gitignore";pkl eval --project-dir "$d" -x launcher "$0" -o "$r/run.$$";mv "$r/run.$$" "$r/run";};exec bash "$r/run" "$0" "$@"'
+#!/usr/bin/env -S bash -ec 'd=${0%/*};r=$d/.pkl-nix-tools;test ! -L "$r";test -f "$r/run"||{ mkdir -p "$r";echo "*" >"$r/.gitignore";pkl eval -w "$d" -x launcher flake.pkl -o ".pkl-nix-tools/run.$$";mv "$r/run.$$" "$r/run";};exec bash "$r/run" "$0" "$@"'
 amends "@nix/Flake.pkl"
 import "@nix/Nix.pkl" as Nix
 local launcher = import("@nixTools/Bootstrap.pkl").output.text
