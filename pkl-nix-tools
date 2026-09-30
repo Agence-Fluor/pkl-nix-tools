@@ -215,6 +215,7 @@ foreign_ref=0
 expect_value=0
 after_separator=0
 expression=0
+lock_write_allowed=1
 for arg in "$@"; do
   if (( expect_value )); then
     args+=("$arg")
@@ -229,6 +230,7 @@ for arg in "$@"; do
     *)
       args+=("$arg")
       case $arg in --expr|--expr=*|--file|--file=*|-f) expression=1 ;; esac
+      case $arg in --no-write-lock-file|--no-update-lock-file) lock_write_allowed=0 ;; esac
       case $arg in
         --command|-c) after_separator=1 ;;
         --out-link|-o|--expr|--file|-f|--system|--store|--eval-store|--log-format|--inputs-from|--reference-lock-file|--output-lock-file|--max-jobs|-j|--cores|--builders|--substituters|--trusted-public-keys|--extra-substituters|--extra-trusted-public-keys|--update-input|--profile|--priority|--extra-experimental-features|--experimental-features|--keep|-k|--unset|-u) expect_value=1 ;;
@@ -246,7 +248,17 @@ fi
 if (( found_current )); then
   (( !foreign_ref )) || fail 'build current and external flakes in separate invocations so their lock files stay independent'
   cache_valid || generate
-  lock_args=(--reference-lock-file "$root/flake.lock" --output-lock-file "$root/flake.lock")
+  if [[ $command == flake && $subcommand == lock ]]; then
+    lock_args=(--reference-lock-file "$root/flake.lock" --output-lock-file "$root/flake.lock")
+  else
+    # Some Nix subcommands resolve an input as a second flake and apply
+    # --output-lock-file to it too. Let Nix lock the project explicitly first.
+    if (( lock_write_allowed )); then
+      nix --extra-experimental-features 'nix-command flakes' flake lock "$ref" \
+        --reference-lock-file "$root/flake.lock" --output-lock-file "$root/flake.lock"
+    fi
+    lock_args=(--reference-lock-file "$root/flake.lock" --no-write-lock-file)
+  fi
 fi
 
 if [[ $command == flake ]]; then

@@ -13,6 +13,10 @@ real_pkl=$(command -v pkl)
 cat > "$work/bin/nix" <<'EOF'
 #!/usr/bin/env bash
 if [[ " $* " == *' hash file '* ]]; then exec "$REAL_NIX" "$@"; fi
+if [[ " $* " == *' flake lock '* ]]; then
+  printf '%s\0' "$@" > "$TOOL_TEST_LOCK_LOG"
+  exit 0
+fi
 printf '%s\0' "$@" > "$TOOL_TEST_LOG"
 exit "${TOOL_TEST_EXIT:-0}"
 EOF
@@ -22,7 +26,7 @@ if [[ ${TOOL_TEST_NO_PKL:-0} == 1 ]]; then exit 99; fi
 exec "$REAL_PKL" "$@"
 EOF
 chmod +x "$work/bin/nix" "$work/bin/pkl"
-export REAL_NIX=$real_nix REAL_PKL=$real_pkl TOOL_TEST_LOG=$work/nix.args
+export REAL_NIX=$real_nix REAL_PKL=$real_pkl TOOL_TEST_LOG=$work/nix.args TOOL_TEST_LOCK_LOG=$work/nix-lock.args
 export PATH="$repo:$work/bin:$PATH"
 
 cat > "$project/flake.pkl" <<EOF
@@ -50,6 +54,12 @@ mapfile -d '' -t argv < "$TOOL_TEST_LOG"
 [[ " ${argv[*]} " == *' build '* ]]
 [[ " ${argv[*]} " == *"path:${project// /%20}?dir=.pkl-nix-tools#hello"* ]]
 [[ " ${argv[*]} " == *"$project/flake.lock"* ]]
+[[ " ${argv[*]} " == *' --no-write-lock-file '* && " ${argv[*]} " != *' --output-lock-file '* ]]
+mapfile -d '' -t lock_argv < "$TOOL_TEST_LOCK_LOG"
+[[ " ${lock_argv[*]} " == *' flake lock '* && " ${lock_argv[*]} " == *' --output-lock-file '* ]]
+rm -f "$TOOL_TEST_LOCK_LOG"
+pkl-nix-tools build --no-write-lock-file
+[[ ! -e $TOOL_TEST_LOCK_LOG ]]
 
 pkl-nix-tools build --out-link 'result with spaces'
 mapfile -d '' -t argv < "$TOOL_TEST_LOG"

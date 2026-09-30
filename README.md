@@ -12,7 +12,7 @@ Dans le `PklProject` du projet :
 amends "pkl:Project"
 dependencies {
   ["nix"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.2" }
-  ["tools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0.1.3" }
+  ["tools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0.1.4" }
 }
 ```
 
@@ -67,6 +67,8 @@ Le wrapper trouve le projet depuis les sous-dossiers et utilise
 `path:/chemin/absolu/projet?dir=.pkl-nix-tools`. Il conserve tout l'arbre
 source : `../message.txt` reste accessible depuis le Nix généré. Aucun
 `flake.nix` ni symlink de ce nom n'est créé à la racine.
+Nix verrouille les entrées du flake dans `flake.lock` avant d'exécuter les
+commandes ; ce fichier reste le lock standard du projet.
 
 Le cache suit les imports Pkl locaux transitifs, les projets importés et le
 lock Pkl. Un cache valide évite toute évaluation Pkl. Les imports glob sont

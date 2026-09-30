@@ -20,6 +20,8 @@ pkl-nix-tools build --no-link
 expected=$(cat message.txt)
 [[ $(pkl-nix-tools run .#hello) == "$expected" ]]
 [[ $(pkl-nix-tools develop --command hello-pkl) == "$expected" ]]
+pkl-nix-tools develop --command true
+cmp flake.lock "$work/original.lock"
 pkl-nix-tools flake check
 rm -rf .pkl-nix-tools
 pkl-nix-tools flake metadata --json > "$work/metadata.json"
