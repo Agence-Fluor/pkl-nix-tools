@@ -5,7 +5,7 @@ repo=$(cd -P -- "$(dirname -- "$0")/.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 mkdir -p "$work/package"
-cp "$repo"/{PklProject,PklProject.deps.json,Bootstrap.pkl,install.pkl,pkl-nix-tools} "$work/package/"
+cp "$repo"/{PklProject,PklProject.deps.json,Bootstrap.pkl,pkl-nix-tools} "$work/package/"
 cp -R "$repo/example" "$work/package/example"
 cd "$work/package/example"
 pkl project resolve

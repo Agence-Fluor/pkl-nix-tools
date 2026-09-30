@@ -1,6 +1,8 @@
-/// The launcher is loaded through the project's pinned Pkl dependency.
+/// Evaluated by the shebang, through the project's pinned Pkl dependency.
 module pklNixTools.Bootstrap
 
+local script = read("pkl-nix-tools").text
+
 output {
-  text = read("pkl-nix-tools").text
+  text = "launcher_digest=\(script.sha256)\nset -- \"$0\" \"$@\"\n" + script
 }

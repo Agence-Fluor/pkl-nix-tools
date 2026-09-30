@@ -16,7 +16,7 @@ sh "$repo/scripts/package-pkl.sh" "$temp/dist"
 version=$(pkl eval --no-project -x 'package.version' "$repo/PklProject")
 archive="$temp/dist/pkl-nix-tools@$version.zip"
 files=$(unzip -Z1 "$archive" | sort)
-test "$files" = "$(printf 'Bootstrap.pkl\ninstall.pkl\npkl-nix-tools')"
+test "$files" = "$(printf 'Bootstrap.pkl\npkl-nix-tools')"
 mkdir -p "$temp/package" "$temp/consumer"
 unzip -q "$archive" -d "$temp/package"
 
@@ -67,10 +67,8 @@ PKL
 chmod +x "$temp/consumer/flake.pkl"
 cd "$temp/consumer"
 pkl project resolve >/dev/null
-pkl run @nixTools/install.pkl --directory "$temp/installed"
-cmp "$temp/installed/run" "$temp/package/pkl-nix-tools"
 ./flake.pkl generate
-cmp .pkl-nix-tools/run "$temp/package/pkl-nix-tools"
+test ! -e .pkl-nix-tools/run
 nix-instantiate --parse .pkl-nix-tools/flake.nix >/dev/null
 grep -Fq 'description = "packaged consumer"' .pkl-nix-tools/flake.nix
 printf 'pkl-nix-tools package tests passed\n'

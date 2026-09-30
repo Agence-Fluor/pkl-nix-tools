@@ -12,8 +12,10 @@ if [[ ${1:-} == --help || ${1:-} == -h ]]; then usage; exit 0; fi
 [[ $# -gt 0 ]] || { usage >&2; exit 2; }
 (( BASH_VERSINFO[0] >= 4 )) || fail 'Bash 4 or newer is required'
 
-script_path=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/${BASH_SOURCE[0]##*/}
-original_args=("$@")
+script_path=
+if [[ -z ${launcher_digest:-} ]]; then
+  script_path=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/${BASH_SOURCE[0]##*/}
+fi
 
 uri_path() {
   local LC_ALL=C source=$1 char hex i
@@ -57,7 +59,7 @@ project_deps_path=
 if [[ -n $pkl_project_path && -f $project_dir/PklProject.deps.json ]]; then
   project_deps_path=$project_dir/PklProject.deps.json
 fi
-cache_key="pkl-nix-tools-fingerprint-v3|$pkl_project_path|$project_deps_path"
+cache_key="pkl-nix-tools-fingerprint-v4|${launcher_digest:-}|$pkl_project_path|$project_deps_path"
 uri_path "$root/flake.pkl"
 entry_uri="file://$encoded"
 uri_path "$root"
@@ -68,6 +70,8 @@ flake_ref="path:$encoded?dir=.pkl-nix-tools"
 mkdir -p -- "$root/.pkl-nix-tools"
 [[ ! -L $root/.pkl-nix-tools/.gitignore ]] || fail "symlink inattendu: $root/.pkl-nix-tools/.gitignore"
 [[ -f $root/.pkl-nix-tools/.gitignore ]] || printf '*\n' > "$root/.pkl-nix-tools/.gitignore"
+# Remove the obsolete launcher extracted by releases before 0.2.
+rm -f -- "$root/.pkl-nix-tools/run"
 flake=$root/.pkl-nix-tools/flake.nix
 fingerprint=$root/.pkl-nix-tools/fingerprint
 # One file, two names. Nix refuses symbolic lock links; a hard link lets it
@@ -108,7 +112,7 @@ cache_valid() {
     ((count+=1))
   done
   exec 3<&-
-  (( count >= 3 ))
+  (( count >= 2 ))
 }
 
 tmp_flake='' tmp_fingerprint=''
@@ -120,7 +124,8 @@ trap cleanup EXIT
 
 generate() {
   local uri path file digest imports
-  local -a files=("$root/flake.pkl" "$script_path")
+  local -a files=("$root/flake.pkl")
+  [[ -z $script_path ]] || files+=("$script_path")
   local -a pkl_project_args=()
   local -a graph_args=(--property "entry=$entry_uri")
   local -A seen=()
@@ -130,19 +135,6 @@ generate() {
     pkl_project_args=(--project-dir "$project_dir")
     uri_path "$pkl_project_path"
     graph_args+=(--property "project=file://$encoded")
-  fi
-  # A project-local launcher refreshes itself through the same Pkl dependency
-  # as the flake. The valid-cache path never starts Pkl.
-  if [[ $script_path == "$root/.pkl-nix-tools/run" ]]; then
-    tmp_flake=$(mktemp "$root/.pkl-nix-tools/run.XXXXXXXX")
-    run_pkl eval "${pkl_project_args[@]}" -x launcher "$root/flake.pkl" -o "$tmp_flake"
-    if ! cmp -s "$script_path" "$tmp_flake"; then
-      mv -f -- "$tmp_flake" "$script_path"
-      tmp_flake=
-      exec bash "$script_path" "${original_args[@]}"
-    fi
-    rm -f -- "$tmp_flake"
-    tmp_flake=
   fi
   imports=$(run_pkl eval "${pkl_project_args[@]}" "${graph_args[@]}" - <<'PKL'
 import "pkl:analyze" as analyze
