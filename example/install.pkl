@@ -1,3 +1,0 @@
-#!/usr/bin/env -S pkl run
-// CLI @aliases require a remote dependency. This module also works with the local checkout.
-amends "@nixTools/install.pkl"
