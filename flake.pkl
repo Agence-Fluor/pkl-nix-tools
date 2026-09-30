@@ -14,13 +14,9 @@ local systems = List("x86_64-linux", "aarch64-linux", "x86_64-darwin", "aarch64-
 devShells {
   for (system in systems) {
     [system] {
-      ["default"] = new Nix.Raw {
-        code =
-          """
-          inputs.nixpkgs.legacyPackages.\(system).mkShell {
-            packages = with inputs.nixpkgs.legacyPackages.\(system); [ bash pkl nix python3 unzip ];
-          }
-          """
+      ["default"] = new Nix.MkShell {
+        pkgs = new Nix.Ref { path = "inputs.nixpkgs.legacyPackages.\(system)" }
+        packages { "bash"; "pkl"; "nix"; "python3"; "unzip" }
       }
     }
   }

@@ -13,8 +13,21 @@ inputs {
 
 packages {
   ["x86_64-linux"] {
-    ["hello"] = new Nix.Raw {
-      code = "inputs.nixpkgs.legacyPackages.x86_64-linux.writeShellScriptBin \"hello-pkl\" \"exec ${inputs.nixpkgs.legacyPackages.x86_64-linux.coreutils}/bin/cat ${../message.txt}\""
+    ["hello"] = new Nix.Apply {
+      callee = new Nix.Ref {
+        path = "inputs.nixpkgs.legacyPackages.x86_64-linux.writeShellScriptBin"
+      }
+      arguments {
+        "hello-pkl"
+        new Nix.InterpolatedString {
+          parts {
+            "exec "
+            new Nix.Ref { path = "inputs.nixpkgs.legacyPackages.x86_64-linux.coreutils" }
+            "/bin/cat "
+            new Nix.Path { value = "../message.txt" }
+          }
+        }
+      }
     }
     ["default"] = new Nix.Ref { path = "self.packages.x86_64-linux.hello" }
   }
@@ -22,8 +35,9 @@ packages {
 
 devShells {
   ["x86_64-linux"] {
-    ["default"] = new Nix.Raw {
-      code = "inputs.nixpkgs.legacyPackages.x86_64-linux.mkShell { packages = [ self.packages.x86_64-linux.hello ]; }"
+    ["default"] = new Nix.MkShell {
+      pkgs = new Nix.Ref { path = "inputs.nixpkgs.legacyPackages.x86_64-linux" }
+      packages { new Nix.Ref { path = "self.packages.x86_64-linux.hello" } }
     }
   }
 }
@@ -31,7 +45,9 @@ devShells {
 apps {
   ["x86_64-linux"] {
     ["hello"] = new Nix.App {
-      program = new Nix.Raw { code = "\"${self.packages.x86_64-linux.hello}/bin/hello-pkl\"" }
+      program = new Nix.InterpolatedString {
+        parts { new Nix.Ref { path = "self.packages.x86_64-linux.hello" }; "/bin/hello-pkl" }
+      }
     }
     ["default"] = new Nix.Ref { path = "self.apps.x86_64-linux.hello" }
   }

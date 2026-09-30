@@ -3,9 +3,9 @@
   "resolvedDependencies": {
     "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0": {
       "type": "remote",
-      "uri": "projectpackage://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.1",
+      "uri": "projectpackage://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.2",
       "checksums": {
-        "sha256": "a223a91757b0bcfac377b6986b780105c7746fde3d3feabdfeec613496bb0ef6"
+        "sha256": "75c15c51ba3676edf5c91f5a92a61014c8c3f927c5806628a369051b5cada081"
       }
     }
   }
