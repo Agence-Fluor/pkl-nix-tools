@@ -41,6 +41,10 @@ chmod +x flake.pkl
 pkl eval flake.pkl                   # afficher le Nix uniquement
 ```
 
+Commitez `PklProject.deps.json` et relancez `pkl project resolve` après une
+modification des dépendances. Les commandes ci-dessus supposent les outputs
+correspondants ; [l'exemple complet](example/flake.pkl) les définit.
+
 Le shebang demande le lanceur à Pkl, puis l’exécute dans le même shell.
 La version vient de `PklProject.deps.json` : aucun script à installer ou
 à mettre à jour dans le projet. Pkl démarre à chaque appel pour lire le lanceur ;
@@ -112,6 +116,11 @@ git push github "$tag"
 
 La CI installe Pkl et Nix, teste l’exécution depuis le paquet et publie les quatre assets Pkl.
 
+## Migration depuis 0.1
+
 Depuis la version 0.2, le lanceur est évalué directement depuis le paquet.
-Remplacez l’ancien shebang par celui ci-dessus ; `install.pkl` n’est plus
-nécessaire. L’ancien fichier `.pkl-nix-tools/run` est supprimé au prochain appel.
+Mettez la dépendance `nixTools` à jour, lancez `pkl project resolve` et
+remplacez l’ancien shebang par celui ci-dessus. L'installateur de
+`pkl-nix-tools` a été supprimé ; retirez les éventuels modules qui amendent
+`@nixTools/install.pkl`. L’ancien fichier `.pkl-nix-tools/run` est supprimé
+au prochain build ou à la prochaine génération.
