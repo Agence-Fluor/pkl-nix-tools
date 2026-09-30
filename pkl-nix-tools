@@ -5,7 +5,8 @@ fail() { printf 'pkl-nix-tools: %s\n' "$*" >&2; exit 1; }
 
 usage() {
   printf '%s\n' 'usage: pkl-nix-tools [path/to/flake.pkl] generate|build|develop|run|flake ...' \
-    'flake.pkl is a Pkl module: ./flake.pkl renders Nix; this command runs Nix.'
+    '       ./flake.pkl generate|build|develop|run|flake ...' \
+    'Run Nix through an executable flake.pkl. Render only: pkl eval flake.pkl'
 }
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then usage; exit 0; fi
 [[ $# -gt 0 ]] || { usage >&2; exit 2; }
@@ -50,6 +51,8 @@ else
   done
   root=$(cd -P -- "$root" && pwd)
 fi
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then usage; exit 0; fi
+[[ $# -gt 0 ]] || { usage >&2; exit 2; }
 project_dir=$root
 pkl_project_path=
 while :; do
@@ -157,7 +160,6 @@ generate() {
   tmp_fingerprint=
 }
 
-[[ $# -gt 0 ]] || { usage >&2; exit 2; }
 if [[ $1 == generate ]]; then
   [[ $# == 1 ]] || fail 'usage: pkl-nix-tools generate'
   generate

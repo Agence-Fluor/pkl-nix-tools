@@ -32,6 +32,8 @@ jobs:
         run: sh scripts/test-package.sh
       - name: Build and run the complete example with Nix
         run: bash scripts/test-e2e.sh
+      - name: Evaluate local and HTTP archive flake inputs
+        run: bash scripts/test-inputs.sh
       - name: Check self-hosted flake against published pkl-nix
         run: |
           pkl eval flake.pkl > /tmp/pkl-nix-tools-flake.nix

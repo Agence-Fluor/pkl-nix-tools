@@ -59,7 +59,7 @@ evaluatorSettings {
 PKL
 sed -e "s/@VERSION@/$version/g" -e "s/@ADDRESS@/$address/g" "$temp/consumer/PklProject.template" > "$temp/consumer/PklProject"
 cat > "$temp/consumer/flake.pkl" <<'PKL'
-#!/usr/bin/env -S pkl eval
+#!/usr/bin/env pkl-nix-tools
 amends "@nix/Flake.pkl"
 description = "packaged consumer"
 PKL
@@ -70,7 +70,7 @@ pkl run @tools/install.pkl --directory "$temp/installed"
 cmp "$temp/installed/pkl-nix-tools" "$temp/package/pkl-nix-tools"
 cmp "$temp/installed/imports.pkl" "$temp/package/imports.pkl"
 chmod +x "$temp/installed/pkl-nix-tools"
-PATH="$temp/installed:$PATH" pkl-nix-tools generate
+PATH="$temp/installed:$PATH" ./flake.pkl generate
 nix-instantiate --parse .pkl-nix-tools/flake.nix >/dev/null
 grep -Fq 'description = "packaged consumer"' .pkl-nix-tools/flake.nix
 printf 'pkl-nix-tools package tests passed\n'

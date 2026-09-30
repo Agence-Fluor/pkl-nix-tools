@@ -12,7 +12,7 @@ Dans le `PklProject` du projet :
 amends "pkl:Project"
 dependencies {
   ["nix"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.2" }
-  ["tools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0.1.4" }
+  ["tools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0.1.5" }
 }
 ```
 
@@ -32,7 +32,7 @@ un autre dossier avec `--directory /chemin/absolu`.
 ## Utiliser
 
 ```pkl
-#!/usr/bin/env -S pkl eval
+#!/usr/bin/env pkl-nix-tools
 amends "@nix/Flake.pkl"
 import "@nix/Nix.pkl" as Nix
 // inputs, packages, devShells, apps, checks…
@@ -40,17 +40,21 @@ import "@nix/Nix.pkl" as Nix
 
 ```sh
 chmod +x flake.pkl
-./flake.pkl                         # afficher le Nix rendu par Pkl
-pkl-nix-tools generate              # régénérer uniquement le cache
-pkl-nix-tools develop
-pkl-nix-tools build .#hello
-pkl-nix-tools run .#hello -- argument
-pkl-nix-tools flake check
-pkl-nix-tools flake update nixpkgs
+./flake.pkl develop
+./flake.pkl build .#hello
+./flake.pkl run .#hello -- argument
+./flake.pkl flake check
+./flake.pkl flake update nixpkgs
+./flake.pkl generate                # régénérer uniquement le cache
+pkl eval flake.pkl                   # afficher le Nix sans l'exécuter
 ```
 
-Le shebang lance réellement Pkl. Les commandes Nix passent par le wrapper
-pour conserver leur terminal et leur code retour. [L'exemple complet](example/README.md)
+Le shebang lance le wrapper installé dans `PATH`, qui génère le Nix avec Pkl
+puis exécute Nix avec les arguments reçus, son terminal et son code retour.
+`pkl eval` seul ne peut pas ouvrir un shell Nix : il interprète `develop` comme
+un nom de module. Sans commande, `./flake.pkl` affiche l'usage ; `--help` affiche
+l'aide. Depuis un sous-dossier, `pkl-nix-tools develop` trouve le projet parent.
+[L'exemple complet](example/README.md)
 fonctionne depuis ce checkout, sans publier ni cloner un autre dépôt.
 
 ```text
@@ -81,6 +85,17 @@ conservent leurs propres locks ; construisez-les séparément du flake courant.
 `flake check`, `show`, `metadata`, `archive`, `prefetch`, `lock` et `update`
 sont pris en charge. Les commandes qui créent un flake restent accessibles
 via `nix`.
+
+## Référencer un autre flake
+
+Les `inputs` utilisent les références Nix habituelles : `github:owner/repo`
+pour un flake Nix distant, ou `path:/chemin/projet?dir=.pkl-nix-tools` pour un
+projet Pkl local après `./flake.pkl generate` dans celui-ci.
+
+Nix n'exécute pas Pkl lorsqu'il charge un input. Pour publier un flake Pkl,
+il faut donc publier une archive contenant les sources et le Nix généré.
+Le paquet Pkl et le flake Nix sont deux dépendances distinctes.
+[Exemples locaux, distants et publication](docs/inputs.md).
 
 ## NixOS
 
