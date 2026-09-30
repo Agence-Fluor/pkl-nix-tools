@@ -1,0 +1,6 @@
+/// The launcher is loaded through the project's pinned Pkl dependency.
+module pklNixTools.Bootstrap
+
+output {
+  text = read("pkl-nix-tools").text
+}

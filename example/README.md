@@ -6,9 +6,6 @@ Depuis ce dossier :
 
 ```sh
 pkl project resolve
-pkl run install.pkl --directory "$PWD/.tools"
-chmod +x .tools/pkl-nix-tools
-export PATH="$PWD/.tools:$PATH"
 ./flake.pkl flake lock
 ./flake.pkl build
 ./flake.pkl run .#hello
@@ -18,6 +15,8 @@ pkl eval flake.pkl                       # afficher le rendu uniquement
 ```
 
 L'application lit `message.txt` via `../message.txt` depuis le Nix généré.
-Nix lit et écrit uniquement le `flake.lock` à la racine de cet exemple.
+Le lanceur est extrait automatiquement de la dépendance Pkl locale, sans
+commande globale. Le lock de la racine est partagé avec le cache par un lien
+physique ; Nix lit et écrit le même fichier.
 Vous pouvez supprimer `.pkl-nix-tools/` ; le wrapper le reconstruit.
 Pour ajouter un autre projet comme input, voir [les références de flakes](../docs/inputs.md).

@@ -2,7 +2,6 @@
 set -euo pipefail
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-XX:-UsePerfData"
 repo=$(cd -P -- "$(dirname -- "$0")/.." && pwd)
-export PATH="$repo:$PATH"
 work=$(mktemp -d)
 server_pid=
 cleanup() {
@@ -14,10 +13,11 @@ mkdir -p "$work/producer" "$work/consumer" "$work/dist/source/.pkl-nix-tools"
 for project in producer consumer; do
   cp "$repo/PklProject" "$repo/PklProject.deps.json" "$work/$project/"
 done
-cat > "$work/producer/flake.pkl" <<'PKL'
-#!/usr/bin/env pkl-nix-tools
+head -n 1 "$repo/flake.pkl" > "$work/producer/flake.pkl"
+cat >> "$work/producer/flake.pkl" <<PKL
 amends "@nix/Flake.pkl"
 import "@nix/Nix.pkl" as Nix
+local launcher = import("$repo/Bootstrap.pkl").output.text
 custom {
   ["message"] = new Nix.Apply {
     callee = new Nix.Ref { path = "builtins.readFile" }
@@ -30,10 +30,11 @@ chmod +x "$work/producer/flake.pkl"
 (cd "$work/producer" && ./flake.pkl generate)
 
 consumer() {
-  cat > "$work/consumer/flake.pkl" <<PKL
-#!/usr/bin/env pkl-nix-tools
+  head -n 1 "$repo/flake.pkl" > "$work/consumer/flake.pkl"
+  cat >> "$work/consumer/flake.pkl" <<PKL
 amends "@nix/Flake.pkl"
 import "@nix/Nix.pkl" as Nix
+local launcher = import("$repo/Bootstrap.pkl").output.text
 inputs {
   ["producer"] = new Nix.Input { url = "$1?dir=.pkl-nix-tools" }
 }
@@ -44,10 +45,9 @@ PKL
     cd "$work/consumer"
     ./flake.pkl flake update producer
     nix --extra-experimental-features 'nix-command flakes' eval \
-      "path:$PWD?dir=.pkl-nix-tools#message" --raw \
-      --reference-lock-file "$PWD/flake.lock" --no-write-lock-file > "$work/actual"
+      "path:$PWD?dir=.pkl-nix-tools#message" --raw --no-write-lock-file > "$work/actual"
     cmp "$work/actual" "$work/expected"
-    [[ -f flake.lock && ! -e flake.nix && ! -e .pkl-nix-tools/flake.lock ]]
+    [[ -f flake.lock && ! -e flake.nix && flake.lock -ef .pkl-nix-tools/flake.lock ]]
   )
 }
 cp "$work/producer/message.txt" "$work/expected"

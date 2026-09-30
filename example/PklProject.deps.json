@@ -10,7 +10,7 @@
     },
     "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0": {
       "type": "local",
-      "uri": "projectpackage://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0.1.5",
+      "uri": "projectpackage://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0.1.6",
       "path": ".."
     }
   }

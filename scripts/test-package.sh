@@ -16,7 +16,7 @@ sh "$repo/scripts/package-pkl.sh" "$temp/dist"
 version=$(pkl eval --no-project -x 'package.version' "$repo/PklProject")
 archive="$temp/dist/pkl-nix-tools@$version.zip"
 files=$(unzip -Z1 "$archive" | sort)
-test "$files" = "$(printf 'imports.pkl\ninstall.pkl\npkl-nix-tools')"
+test "$files" = "$(printf 'Bootstrap.pkl\ninstall.pkl\npkl-nix-tools')"
 mkdir -p "$temp/package" "$temp/consumer"
 unzip -q "$archive" -d "$temp/package"
 
@@ -44,7 +44,7 @@ address=$(cat "$temp/address")
 cat > "$temp/consumer/PklProject.template" <<'PKL'
 amends "pkl:Project"
 dependencies {
-  ["tools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@@VERSION@" }
+  ["nixTools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@@VERSION@" }
   ["nix"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.2" }
 }
 evaluatorSettings {
@@ -58,19 +58,19 @@ evaluatorSettings {
 }
 PKL
 sed -e "s/@VERSION@/$version/g" -e "s/@ADDRESS@/$address/g" "$temp/consumer/PklProject.template" > "$temp/consumer/PklProject"
-cat > "$temp/consumer/flake.pkl" <<'PKL'
-#!/usr/bin/env pkl-nix-tools
+head -n 1 "$repo/flake.pkl" > "$temp/consumer/flake.pkl"
+cat >> "$temp/consumer/flake.pkl" <<'PKL'
 amends "@nix/Flake.pkl"
+local launcher = import("@nixTools/Bootstrap.pkl").output.text
 description = "packaged consumer"
 PKL
 chmod +x "$temp/consumer/flake.pkl"
 cd "$temp/consumer"
 pkl project resolve >/dev/null
-pkl run @tools/install.pkl --directory "$temp/installed"
-cmp "$temp/installed/pkl-nix-tools" "$temp/package/pkl-nix-tools"
-cmp "$temp/installed/imports.pkl" "$temp/package/imports.pkl"
-chmod +x "$temp/installed/pkl-nix-tools"
-PATH="$temp/installed:$PATH" ./flake.pkl generate
+pkl run @nixTools/install.pkl --directory "$temp/installed"
+cmp "$temp/installed/run" "$temp/package/pkl-nix-tools"
+./flake.pkl generate
+cmp .pkl-nix-tools/run "$temp/package/pkl-nix-tools"
 nix-instantiate --parse .pkl-nix-tools/flake.nix >/dev/null
 grep -Fq 'description = "packaged consumer"' .pkl-nix-tools/flake.nix
 printf 'pkl-nix-tools package tests passed\n'

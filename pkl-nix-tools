@@ -12,19 +12,8 @@ if [[ ${1:-} == --help || ${1:-} == -h ]]; then usage; exit 0; fi
 [[ $# -gt 0 ]] || { usage >&2; exit 2; }
 (( BASH_VERSINFO[0] >= 4 )) || fail 'Bash 4 or newer is required'
 
-script_path=${BASH_SOURCE[0]}
-while [[ -L $script_path ]]; do
-  link_dir=$(cd -P -- "$(dirname -- "$script_path")" && pwd)
-  link_target=$(readlink -- "$script_path")
-  if [[ $link_target == /* ]]; then
-    script_path=$link_target
-  else
-    script_path=$link_dir/$link_target
-  fi
-done
-script_dir=$(cd -P -- "$(dirname -- "$script_path")" && pwd)
-PATH="$script_dir:$PATH"
-[[ -f $script_dir/imports.pkl ]] || fail "imports.pkl introuvable près de $script_path"
+script_path=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/${BASH_SOURCE[0]##*/}
+original_args=("$@")
 
 uri_path() {
   local LC_ALL=C source=$1 char hex i
@@ -68,7 +57,7 @@ project_deps_path=
 if [[ -n $pkl_project_path && -f $project_dir/PklProject.deps.json ]]; then
   project_deps_path=$project_dir/PklProject.deps.json
 fi
-cache_key="pkl-nix-tools-fingerprint-v2|$pkl_project_path|$project_deps_path"
+cache_key="pkl-nix-tools-fingerprint-v3|$pkl_project_path|$project_deps_path"
 uri_path "$root/flake.pkl"
 entry_uri="file://$encoded"
 uri_path "$root"
@@ -81,8 +70,20 @@ mkdir -p -- "$root/.pkl-nix-tools"
 [[ -f $root/.pkl-nix-tools/.gitignore ]] || printf '*\n' > "$root/.pkl-nix-tools/.gitignore"
 flake=$root/.pkl-nix-tools/flake.nix
 fingerprint=$root/.pkl-nix-tools/fingerprint
-# Old generated locks are disposable; Nix reads and writes the project lock.
-rm -f -- "$root/.pkl-nix-tools/flake.lock"
+# One file, two names. Nix refuses symbolic lock links; a hard link lets it
+# read and write the root lock without leaking global lock flags to nixpkgs.
+link_lock() {
+  local lock=$root/.pkl-nix-tools/flake.lock
+  if [[ -f $root/flake.lock ]]; then
+    if [[ -L $lock || ! $root/flake.lock -ef $lock ]]; then
+      rm -f -- "$lock"
+      ln -- "$root/flake.lock" "$lock"
+    fi
+  else
+    rm -f -- "$lock"
+  fi
+}
+link_lock
 
 hash_file() { nix --extra-experimental-features 'nix-command flakes' hash file --type sha256 --base16 -- "$1"; }
 run_pkl() { JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-XX:-UsePerfData" pkl "$@"; }
@@ -119,7 +120,7 @@ trap cleanup EXIT
 
 generate() {
   local uri path file digest imports
-  local -a files=("$root/flake.pkl" "$script_dir/imports.pkl" "$script_dir/pkl-nix-tools")
+  local -a files=("$root/flake.pkl" "$script_path")
   local -a pkl_project_args=()
   local -a graph_args=(--property "entry=$entry_uri")
   local -A seen=()
@@ -130,7 +131,29 @@ generate() {
     uri_path "$pkl_project_path"
     graph_args+=(--property "project=file://$encoded")
   fi
-  imports=$(run_pkl eval "${pkl_project_args[@]}" "${graph_args[@]}" "$script_dir/imports.pkl")
+  # A project-local launcher refreshes itself through the same Pkl dependency
+  # as the flake. The valid-cache path never starts Pkl.
+  if [[ $script_path == "$root/.pkl-nix-tools/run" ]]; then
+    tmp_flake=$(mktemp "$root/.pkl-nix-tools/run.XXXXXXXX")
+    run_pkl eval "${pkl_project_args[@]}" -x launcher "$root/flake.pkl" -o "$tmp_flake"
+    if ! cmp -s "$script_path" "$tmp_flake"; then
+      mv -f -- "$tmp_flake" "$script_path"
+      tmp_flake=
+      exec bash "$script_path" "${original_args[@]}"
+    fi
+    rm -f -- "$tmp_flake"
+    tmp_flake=
+  fi
+  imports=$(run_pkl eval "${pkl_project_args[@]}" "${graph_args[@]}" - <<'PKL'
+import "pkl:analyze" as analyze
+local entry = read("prop:entry")
+local project = read?("prop:project")
+local graph = analyze.importGraph(if (project == null) Set(entry) else Set(entry, project))
+output {
+  text = graph.resolvedImports.values.filter((uri) -> uri.startsWith("file:")).toList().sort().join("\n") + "\n"
+}
+PKL
+  )
   while IFS= read -r uri; do
     [[ $uri == file:///* ]] || continue
     path=${uri#file://}
@@ -206,9 +229,16 @@ if [[ $command == flake && $subcommand == update ]]; then
   if (( !explicit_flake )); then args=(--flake "$ref" "${args[@]}"); fi
   if (( current_flake )); then
     cache_valid || generate
-    lock_args=(--reference-lock-file "$root/flake.lock" --output-lock-file "$root/flake.lock")
+    # The first native lock goes straight to the root. Later invocations use
+    # the hard link, including Nix's normal update and override behavior.
+    [[ -f $root/flake.lock ]] || lock_args=(--output-lock-file "$root/flake.lock")
   fi
-  exec nix --extra-experimental-features 'nix-command flakes' flake update "${lock_args[@]}" "${args[@]}"
+  if (( ${#lock_args[@]} )); then
+    nix --extra-experimental-features 'nix-command flakes' flake update "${lock_args[@]}" "${args[@]}"
+    link_lock
+    exit 0
+  fi
+  exec nix --extra-experimental-features 'nix-command flakes' flake update "${args[@]}"
 fi
 
 declare -a args=()
@@ -218,7 +248,19 @@ expect_value=0
 after_separator=0
 expression=0
 lock_write_allowed=1
+lock_options=()
+lock_values=0
 for arg in "$@"; do
+  if (( lock_values )); then
+    lock_options+=("$arg"); lock_values=$((lock_values-1))
+  elif (( !after_separator && !expect_value )); then
+    case $arg in
+      --override-input|--override-flake|--option) lock_options+=("$arg"); lock_values=2 ;;
+      --update-input|--inputs-from|--store|--eval-store|--extra-experimental-features|--experimental-features) lock_options+=("$arg"); lock_values=1 ;;
+      --offline|--refresh|--impure|--recreate-lock-file|--no-registries|--no-use-registries|--accept-flake-config|--allow-dirty-locks) lock_options+=("$arg") ;;
+      --override-input=*|--override-flake=*|--option=*|--update-input=*|--inputs-from=*|--store=*|--eval-store=*|--extra-experimental-features=*|--experimental-features=*) lock_options+=("$arg") ;;
+    esac
+  fi
   if (( expect_value )); then
     args+=("$arg")
     expect_value=$((expect_value-1))
@@ -250,20 +292,23 @@ fi
 if (( found_current )); then
   (( !foreign_ref )) || fail 'build current and external flakes in separate invocations so their lock files stay independent'
   cache_valid || generate
-  if [[ $command == flake && $subcommand == lock ]]; then
-    lock_args=(--reference-lock-file "$root/flake.lock" --output-lock-file "$root/flake.lock")
-  else
-    # Some Nix subcommands resolve an input as a second flake and apply
-    # --output-lock-file to it too. Let Nix lock the project explicitly first.
-    if (( lock_write_allowed )); then
+  if [[ ! -f $root/flake.lock ]]; then
+    if [[ $command == flake && $subcommand == lock ]]; then
+      lock_args=(--output-lock-file "$root/flake.lock")
+    elif (( lock_write_allowed )); then
       nix --extra-experimental-features 'nix-command flakes' flake lock "$ref" \
-        --reference-lock-file "$root/flake.lock" --output-lock-file "$root/flake.lock"
+        --output-lock-file "$root/flake.lock" "${lock_options[@]}"
+      link_lock
     fi
-    lock_args=(--reference-lock-file "$root/flake.lock" --no-write-lock-file)
   fi
 fi
 
 if [[ $command == flake ]]; then
+  if (( ${#lock_args[@]} )); then
+    nix --extra-experimental-features 'nix-command flakes' flake "$subcommand" "${lock_args[@]}" "${args[@]}"
+    link_lock
+    exit 0
+  fi
   exec nix --extra-experimental-features 'nix-command flakes' flake "$subcommand" "${lock_args[@]}" "${args[@]}"
 else
   exec nix --extra-experimental-features 'nix-command flakes' "$command" "${lock_args[@]}" "${args[@]}"

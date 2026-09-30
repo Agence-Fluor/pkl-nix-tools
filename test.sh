@@ -15,6 +15,11 @@ cat > "$work/bin/nix" <<'EOF'
 if [[ " $* " == *' hash file '* ]]; then exec "$REAL_NIX" "$@"; fi
 if [[ " $* " == *' flake lock '* ]]; then
   printf '%s\0' "$@" > "$TOOL_TEST_LOCK_LOG"
+  previous=
+  for arg in "$@"; do
+    if [[ $previous == --output-lock-file ]]; then printf '{"nodes":{"root":{}},"root":"root","version":7}\n' > "$arg"; fi
+    previous=$arg
+  done
   exit 0
 fi
 printf '%s\0' "$@" > "$TOOL_TEST_LOG"
@@ -29,21 +34,24 @@ chmod +x "$work/bin/nix" "$work/bin/pkl"
 export REAL_NIX=$real_nix REAL_PKL=$real_pkl TOOL_TEST_LOG=$work/nix.args TOOL_TEST_LOCK_LOG=$work/nix-lock.args
 export PATH="$repo:$work/bin:$PATH"
 
-cat > "$project/flake.pkl" <<EOF
-#!/usr/bin/env pkl-nix-tools
+head -n 1 "$repo/flake.pkl" > "$project/flake.pkl"
+cat >> "$project/flake.pkl" <<EOF
 import "value.pkl" as Value
+local launcher = import("$repo/Bootstrap.pkl").output.text
 output {
   text = "{ description = \"" + Value.description + "\"; outputs = { self, ... }: { }; }"
 }
 EOF
 chmod +x "$project/flake.pkl"
 printf 'description = "first"\n' > "$project/value.pkl"
+printf 'amends "pkl:Project"\n' > "$project/PklProject"
 
 cd "$project"
-TOOL_TEST_NO_PKL=1 ./flake.pkl --help > "$work/help.txt"
+./flake.pkl --help > "$work/help.txt"
 grep -Fq './flake.pkl generate|build|develop|run|flake' "$work/help.txt"
 if ./flake.pkl > "$work/bare.txt" 2>&1; then exit 1; else [[ $? == 2 ]]; fi
-[[ ! -e .pkl-nix-tools && ! -e $TOOL_TEST_LOG ]]
+[[ ! -e .pkl-nix-tools/flake.nix && ! -e $TOOL_TEST_LOG ]]
+TOOL_TEST_NO_PKL=1 ./flake.pkl --help >/dev/null
 pkl eval flake.pkl > "$work/rendered.nix"
 nix-instantiate --parse "$work/rendered.nix" >/dev/null
 pkl-nix-tools generate
@@ -57,8 +65,8 @@ export TOOL_TEST_NO_PKL=1
 mapfile -d '' -t argv < "$TOOL_TEST_LOG"
 [[ " ${argv[*]} " == *' build '* ]]
 [[ " ${argv[*]} " == *"path:${project// /%20}?dir=.pkl-nix-tools#hello"* ]]
-[[ " ${argv[*]} " == *"$project/flake.lock"* ]]
-[[ " ${argv[*]} " == *' --no-write-lock-file '* && " ${argv[*]} " != *' --output-lock-file '* ]]
+[[ flake.lock -ef .pkl-nix-tools/flake.lock ]]
+[[ " ${argv[*]} " != *' --reference-lock-file '* && " ${argv[*]} " != *' --output-lock-file '* ]]
 mapfile -d '' -t lock_argv < "$TOOL_TEST_LOCK_LOG"
 [[ " ${lock_argv[*]} " == *' flake lock '* && " ${lock_argv[*]} " == *' --output-lock-file '* ]]
 rm -f "$TOOL_TEST_LOCK_LOG"
@@ -93,7 +101,7 @@ mapfile -d '' -t argv < "$TOOL_TEST_LOG"
 [[ " ${argv[*]} " != *'path:'* && " ${argv[*]} " != *'--output-lock-file'* ]]
 pkl-nix-tools flake update nixpkgs
 mapfile -d '' -t argv < "$TOOL_TEST_LOG"
-[[ ${argv[-1]} == nixpkgs && " ${argv[*]} " == *'--output-lock-file'* ]]
+[[ ${argv[-1]} == nixpkgs && " ${argv[*]} " != *'--output-lock-file'* ]]
 pkl-nix-tools flake update --flake github:example/flake nixpkgs
 mapfile -d '' -t argv < "$TOOL_TEST_LOG"
 [[ " ${argv[*]} " != *'--output-lock-file'* && ${argv[-1]} == nixpkgs ]]
@@ -130,20 +138,35 @@ mkdir -p nested
 mapfile -d '' -t argv < "$TOOL_TEST_LOG"
 [[ " ${argv[*]} " == *"path:${project// /%20}?dir=.pkl-nix-tools --command true"* ]]
 
+# A changed Pkl dependency refreshes the cached launcher before running Nix.
+cat > launcher-source.pkl <<EOF
+import "$repo/Bootstrap.pkl" as Tool
+output { text = Tool.output.text }
+EOF
+sed -i "s|import(\"$repo/Bootstrap.pkl\")|import(\"launcher-source.pkl\")|" flake.pkl
+./flake.pkl generate
+cat > launcher-source.pkl <<EOF
+import "$repo/Bootstrap.pkl" as Tool
+output { text = Tool.output.text + "\\n# bootstrap upgraded\\n" }
+EOF
+./flake.pkl build
+grep -Fq '# bootstrap upgraded' .pkl-nix-tools/run
+TOOL_TEST_NO_PKL=1 ./flake.pkl build
+
 rm -rf .pkl-nix-tools
-pkl-nix-tools generate
+(cd "$work" && "$project/flake.pkl" generate)
 [[ -f .pkl-nix-tools/flake.nix && -f .pkl-nix-tools/fingerprint ]]
 
 (
     mkdir -p "$work/checkout"
-    cp "$repo/PklProject" "$repo/PklProject.deps.json" "$repo/imports.pkl" "$repo/install.pkl" "$repo/pkl-nix-tools" "$work/checkout/"
+    cp "$repo/PklProject" "$repo/PklProject.deps.json" "$repo/Bootstrap.pkl" "$repo/install.pkl" "$repo/pkl-nix-tools" "$work/checkout/"
     cp -R "$repo/example" "$work/checkout/example"
     cd "$work/checkout/example"
     pkl project resolve >/dev/null
     pkl-nix-tools generate
     nix-instantiate --parse .pkl-nix-tools/flake.nix >/dev/null
     grep -Fq '../message.txt' .pkl-nix-tools/flake.nix
-    [[ -f flake.lock && ! -e flake.nix && ! -e .pkl-nix-tools/flake.lock ]]
+    [[ -f flake.lock && ! -e flake.nix && flake.lock -ef .pkl-nix-tools/flake.lock ]]
 )
 
 printf 'pkl-nix-tools tests passed\n'

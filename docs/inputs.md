@@ -19,7 +19,7 @@ suivent les règles [natives de Nix](https://nix.dev/manual/nix/2.35/command-ref
 
 ## Projet Pkl local
 
-Générez d'abord le flake du projet référencé, avec le wrapper installé dans `PATH` :
+Générez d'abord le flake du projet référencé, après `pkl project resolve` dans ce projet :
 
 ```sh
 /chemin/commun/flake.pkl generate
@@ -67,6 +67,9 @@ stage=$(mktemp -d)
 mkdir -p "$stage/source/.pkl-nix-tools"
 git archive HEAD | tar -x -C "$stage/source"
 cp .pkl-nix-tools/flake.nix "$stage/source/.pkl-nix-tools/flake.nix"
+if [ -f "$stage/source/flake.lock" ]; then
+  ln "$stage/source/flake.lock" "$stage/source/.pkl-nix-tools/flake.lock"
+fi
 tar -czf /tmp/commun-flake.tar.gz -C "$stage" source
 rm -rf "$stage"
 # Publier /tmp/commun-flake.tar.gz comme asset de release.
@@ -74,9 +77,9 @@ rm -rf "$stage"
 
 L'archive conserve tout l'arbre du projet, donc les chemins `../…` du Nix
 généré fonctionnent. Elle n'ajoute aucun `flake.nix` à la racine et n'embarque
-pas de lock dans le dossier généré. Les inputs transitifs sont verrouillés
-par le consommateur ; le lock placé à la racine du producteur ne sert pas de
-lock au flake du sous-dossier lorsqu'il est chargé directement par Nix.
+pas de lock indépendant : les deux noms désignent le même fichier dans
+l’archive aussi. Nix peut reprendre les versions des inputs transitifs du
+producteur, puis verrouille le graphe complet dans le lock du consommateur.
 
 ```pkl
 inputs {

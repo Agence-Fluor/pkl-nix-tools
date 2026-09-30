@@ -1,130 +1,105 @@
 # pkl-nix-tools
 
-Un petit wrapper Bash autour de **Pkl + Nix**. `flake.pkl` décrit le flake,
-Pkl produit le Nix, et Nix gère les builds, shells, applications et locks.
-Prérequis : Bash 4+, Pkl 0.31.1+ et Nix avec Flakes.
+`./flake.pkl develop`, `build`, `run` : **Pkl décrit le flake, Nix l'exécute**.
+Le wrapper Bash vient de la dépendance Pkl du projet. Aucune installation
+globale de `pkl-nix-tools`, aucun export de `PATH`.
 
-## Installer depuis Pkl
+Prérequis système : Bash 4+, Pkl 0.31.1+, Nix avec Flakes et les utilitaires Unix.
 
-Dans le `PklProject` du projet :
+## Démarrer
+
+Dans `PklProject` :
 
 ```pkl
 amends "pkl:Project"
 dependencies {
   ["nix"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.2" }
-  ["tools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0.1.5" }
+  ["nixTools"] { uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix-tools/pkl-nix-tools@0.1.6" }
 }
 ```
 
-Résolvez les dépendances et installez le wrapper :
-
-```sh
-pkl project resolve
-pkl run @tools/install.pkl
-chmod +x "$HOME/.local/share/pkl-nix-tools/pkl-nix-tools"
-export PATH="$HOME/.local/share/pkl-nix-tools:$PATH"
-```
-
-L'installateur Pkl extrait le wrapper et `imports.pkl`. Pkl ne fixe pas les
-permissions exécutables ; le `chmod` termine l'installation. On peut choisir
-un autre dossier avec `--directory /chemin/absolu`.
-
-## Utiliser
+Dans `flake.pkl`, reprenez le bootstrap de [l'exemple](example/flake.pkl) :
 
 ```pkl
-#!/usr/bin/env pkl-nix-tools
+#!/usr/bin/env -S bash -ec 'd=${0%/*};r=$d/.pkl-nix-tools;test ! -L "$r";test -f "$r/run"||{ mkdir -p "$r";echo "*" >"$r/.gitignore";pkl eval --project-dir "$d" -x launcher "$0" -o "$r/run.$$";mv "$r/run.$$" "$r/run";};exec bash "$r/run" "$0" "$@"'
 amends "@nix/Flake.pkl"
 import "@nix/Nix.pkl" as Nix
+local launcher = import("@nixTools/Bootstrap.pkl").output.text
 // inputs, packages, devShells, apps, checks…
 ```
 
 ```sh
+pkl project resolve
 chmod +x flake.pkl
 ./flake.pkl develop
 ./flake.pkl build .#hello
 ./flake.pkl run .#hello -- argument
 ./flake.pkl flake check
 ./flake.pkl flake update nixpkgs
-./flake.pkl generate                # régénérer uniquement le cache
-pkl eval flake.pkl                   # afficher le Nix sans l'exécuter
+./flake.pkl generate                 # forcer la génération uniquement
+pkl eval flake.pkl                   # afficher le Nix uniquement
 ```
 
-Le shebang lance le wrapper installé dans `PATH`, qui génère le Nix avec Pkl
-puis exécute Nix avec les arguments reçus, son terminal et son code retour.
-`pkl eval` seul ne peut pas ouvrir un shell Nix : il interprète `develop` comme
-un nom de module. Sans commande, `./flake.pkl` affiche l'usage ; `--help` affiche
-l'aide. Depuis un sous-dossier, `pkl-nix-tools develop` trouve le projet parent.
-[L'exemple complet](example/README.md)
-fonctionne depuis ce checkout, sans publier ni cloner un autre dépôt.
+Le shebang extrait le lanceur dans le projet, puis le lance par son chemin.
+La version vient de `PklProject.deps.json`. Le wrapper se recharge lorsque
+les dépendances changent ; un cache valide ne lance pas Pkl.
+`./flake.pkl --help` affiche l'usage. Les arguments, le terminal interactif
+et le code retour sont transmis à Nix.
+
+## Sources et lock
 
 ```text
 project/
-├── PklProject + PklProject.deps.json  # dépendances Pkl
-├── flake.pkl                         # source
-├── flake.lock                        # lock Nix normal
-└── .pkl-nix-tools/                    # généré et ignoré par Git
+├── PklProject + PklProject.deps.json
+├── flake.pkl
+├── flake.lock                       # unique fichier de lock Nix
+└── .pkl-nix-tools/                  # généré, ignoré par Git
+    ├── run                         # wrapper issu du paquet Pkl
     ├── flake.nix
+    ├── flake.lock                  # lien physique vers ../flake.lock
     └── fingerprint
 ```
 
-Le wrapper trouve le projet depuis les sous-dossiers et utilise
-`path:/chemin/absolu/projet?dir=.pkl-nix-tools`. Il conserve tout l'arbre
-source : `../message.txt` reste accessible depuis le Nix généré. Aucun
-`flake.nix` ni symlink de ce nom n'est créé à la racine.
-Nix verrouille les entrées du flake dans `flake.lock` avant d'exécuter les
-commandes ; ce fichier reste le lock standard du projet.
+Le lien physique désigne **le même fichier**, sans copie ni lock indépendant.
+Il est rétabli à chaque appel si un éditeur a remplacé le lock de la racine.
+Nix retrouve ainsi son lock à côté du flake sans appliquer le lock du projet
+à ses autres évaluations internes, notamment `nixpkgs` pendant `develop`.
 
-Le cache suit les imports Pkl locaux transitifs, les projets importés et le
-lock Pkl. Un cache valide évite toute évaluation Pkl. Les imports glob sont
-réévalués ; après modification d'une ressource lue avec `read()` ou d'une
-variable d'environnement, utilisez `generate`. Supprimer `.pkl-nix-tools/`
-force sa reconstruction au prochain appel.
+Le flake est adressé par `path:/chemin/projet?dir=.pkl-nix-tools` : tout
+l'arbre source reste accessible via `../…`. Aucun `flake.nix` à la racine.
+`rm -rf .pkl-nix-tools` conserve le lock racine ; le prochain appel reconstruit
+le lanceur et le flake.
 
-Seules les références au flake courant sont réécrites. Les flakes externes
-conservent leurs propres locks ; construisez-les séparément du flake courant.
-`flake check`, `show`, `metadata`, `archive`, `prefetch`, `lock` et `update`
-sont pris en charge. Les commandes qui créent un flake restent accessibles
-via `nix`.
+Le fingerprint suit les imports Pkl locaux transitifs et le lock Pkl.
+Après modification d'une ressource lue par `read()` ou d'une variable
+d'environnement, utilisez `generate`. Les imports glob sont réévalués.
 
-## Référencer un autre flake
-
-Les `inputs` utilisent les références Nix habituelles : `github:owner/repo`
-pour un flake Nix distant, ou `path:/chemin/projet?dir=.pkl-nix-tools` pour un
-projet Pkl local après `./flake.pkl generate` dans celui-ci.
-
-Nix n'exécute pas Pkl lorsqu'il charge un input. Pour publier un flake Pkl,
-il faut donc publier une archive contenant les sources et le Nix généré.
-Le paquet Pkl et le flake Nix sont deux dépendances distinctes.
-[Exemples locaux, distants et publication](docs/inputs.md).
+Seules les références au flake courant sont réécrites. Commandes prises en
+charge : `build`, `develop`, `run`, `flake check|show|metadata|archive|prefetch|lock|update`.
+[Exemple complet](example/README.md) · [Inputs locaux et distants](docs/inputs.md).
 
 ## NixOS
 
-Placez le checkout sous `/etc/nixos/pkl-nix-tools`, puis ajoutez à
-`configuration.nix` :
+Les prérequis peuvent être déclarés dans `configuration.nix` :
 
 ```nix
-environment.systemPackages = with pkgs; [
-  nix pkl
-  (runCommand "pkl-nix-tools" { nativeBuildInputs = [ makeWrapper ]; } ''
-    mkdir -p $out/libexec/pkl-nix-tools $out/bin
-    cp ${./pkl-nix-tools/pkl-nix-tools} ${./pkl-nix-tools/imports.pkl} $out/libexec/pkl-nix-tools/
-    chmod +x $out/libexec/pkl-nix-tools/pkl-nix-tools
-    patchShebangs $out/libexec/pkl-nix-tools/pkl-nix-tools
-    makeWrapper $out/libexec/pkl-nix-tools/pkl-nix-tools $out/bin/pkl-nix-tools \
-      --prefix PATH : ${lib.makeBinPath [ bash pkl nix coreutils ]}
-  '')
-];
+environment.systemPackages = with pkgs; [ bash pkl nix ];
+nix.settings.experimental-features = [ "nix-command" "flakes" ];
 ```
 
-Appliquez avec `sudo nixos-rebuild switch`.
+Appliquez avec `sudo nixos-rebuild switch`, puis utilisez les commandes ci-dessus.
 
 ## Développer et publier
 
-Depuis ce checkout, `export PATH="$PWD:$PATH"` suffit pour utiliser le wrapper.
-`sh scripts/test-package.sh` vérifie le cache, les arguments Nix et
-l'installation depuis le paquet. `sh scripts/package-pkl.sh` crée les assets.
+```sh
+pkl project resolve
+./flake.pkl develop
+sh scripts/test-package.sh
+bash scripts/test-e2e.sh
+bash scripts/test-inputs.sh
+```
 
-La version est dans `PklProject`. Après l'avoir commitée :
+Après avoir commité la version de `PklProject` :
 
 ```sh
 tag=$(sh scripts/release-tag.sh)
@@ -132,4 +107,4 @@ git tag "$tag"
 git push github "$tag"
 ```
 
-La CI vérifie le tag avant les tests et publie les quatre assets Pkl.
+La CI installe Pkl et Nix, teste le bootstrap et publie les quatre assets Pkl.

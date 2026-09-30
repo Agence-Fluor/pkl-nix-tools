@@ -1,7 +1,7 @@
 amends "pkl:Project"
 
 dependencies {
-  ["tools"] = import("../PklProject")
+  ["nixTools"] = import("../PklProject")
   ["nix"] {
     uri = "package://pkg.pkl-lang.org/github.com/Agence-Fluor/pkl-nix/pkl-nix@0.1.2"
   }
